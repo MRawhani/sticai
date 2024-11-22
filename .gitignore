@@ -2,3 +2,4 @@
 fastapi-venv
 fastapi-env
 .DS_Store
+models
