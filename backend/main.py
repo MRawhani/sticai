@@ -2,20 +2,27 @@ from fastapi import FastAPI
 import torch
 from diffusers import StableDiffusion3Pipeline,StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
 from huggingface_hub import login
-
+from uuid import uuid4
 
 import os
+from fastapi.staticfiles import StaticFiles
+
 
 # Initialize FastAPI
 app = FastAPI()
+# Attach a static directory to serve files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Define the local path to store the model
 xl_local_model_path = "./models/stable-diffusion-xl-base-1.0"
 refiner_local_model_path = "./models/stable-diffusion-xl-refiner-1.0"
 base_model_id = "stabilityai/stable-diffusion-xl-base-1.0"
 refiner_model_id = "stabilityai/stable-diffusion-xl-refiner-1.0"
+static_dir = "./static"  # Directory to store generated images
 
 pipe = None  # Global variable for the pipeline
+# Ensure the static directory exists
+os.makedirs(static_dir, exist_ok=True)
 
 @app.get('/')
 def index():
@@ -77,16 +84,31 @@ async def generate_image(prompt: str):
         if pipe is None:
             return {"error": "Model pipeline not loaded. Please check the server startup logs."}
 
-        # Generate the image
+                # Generate the image
         image = pipe(prompt).images[0]
-        output_path = "output.png"
+        output_filename = f"{uuid4().hex}.png"  # Generate a unique filename
+        output_path = os.path.join(static_dir, output_filename)
         image.save(output_path)
         print(f"Image generated and saved at {output_path}")
-        return {"message": "Image generated successfully", "image_path": output_path}
+
+        # Return the URL to access the image
+        image_url = f"/static/{output_filename}"
+        return {"message": "Image generated successfully", "image_url": image_url}
     except Exception as e:
         print(f"Error during image generation: {e}")
         return {"error": str(e)}
-
+    
+@app.get("/view-image/{image_name}")
+def view_image(image_name: str):
+    """
+    API endpoint to serve a specific image.
+    """
+    file_path = os.path.join(static_dir, image_name)
+    if os.path.exists(file_path):
+        return FileResponse(file_path)
+    else:
+        return {"error": "Image not found"}
+    
 @app.on_event("shutdown")
 def unload_pipeline():
     """
