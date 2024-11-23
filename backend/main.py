@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 import torch
-from diffusers import StableDiffusion3Pipeline,StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline
+from diffusers import StableDiffusion3Pipeline,StableDiffusionXLPipeline, StableDiffusionXLImg2ImgPipeline,EulerAncestralDiscreteScheduler
 from huggingface_hub import login
 from uuid import uuid4
 
 import os
 from fastapi.staticfiles import StaticFiles
-
+from fastapi.responses import FileResponse
 
 # Initialize FastAPI
 app = FastAPI()
@@ -21,6 +21,9 @@ refiner_model_id = "stabilityai/stable-diffusion-xl-refiner-1.0"
 static_dir = "./static"  # Directory to store generated images
 
 pipe = None  # Global variable for the pipeline
+refiner_pipe = None  # Global variable for the pipeline
+
+
 # Ensure the static directory exists
 os.makedirs(static_dir, exist_ok=True)
 
@@ -44,6 +47,7 @@ def load_pipeline():
     and loads it into memory for use.
     """
     global pipe
+    global refiner_pipe
     try:
         # Check if the model exists locally
         if not os.path.exists(xl_local_model_path):
@@ -80,19 +84,25 @@ async def generate_image(prompt: str):
     API endpoint to generate an image from a given prompt.
     """
     global pipe
+    global refiner_pipe
+
     try:
-        if pipe is None:
+        if pipe is None or refiner_pipe is None:
             return {"error": "Model pipeline not loaded. Please check the server startup logs."}
 
-                # Generate the image
-        image = pipe(prompt).images[0]
+        scheduler = EulerAncestralDiscreteScheduler.from_config(pipe.scheduler.config)
+        pipe.scheduler = scheduler
+
+        # Generate the image
+        image = pipe(prompt=prompt, num_inference_steps=100, guidance_scale=7.5, height=512, width=512).images[0]
+        refined_image = refiner_pipe(prompt=prompt, image=image, num_inference_steps=100,guidance_scale=7.5, height=512, width=512).images[0]
         output_filename = f"{uuid4().hex}.png"  # Generate a unique filename
         output_path = os.path.join(static_dir, output_filename)
-        image.save(output_path)
+        refined_image.save(output_path)
         print(f"Image generated and saved at {output_path}")
 
         # Return the URL to access the image
-        image_url = f"/static/{output_filename}"
+        image_url = f"/view-image/{output_filename}"
         return {"message": "Image generated successfully", "image_url": image_url}
     except Exception as e:
         print(f"Error during image generation: {e}")
@@ -103,6 +113,8 @@ def view_image(image_name: str):
     """
     API endpoint to serve a specific image.
     """
+
+    print('image viewed')
     file_path = os.path.join(static_dir, image_name)
     if os.path.exists(file_path):
         return FileResponse(file_path)
