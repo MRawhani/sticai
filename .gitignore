@@ -1,5 +1,10 @@
 */__pycache__
 fastapi-venv
-fastapi-env
 .DS_Store
-models
+backend/fastapi-env
+backend/models/*
+backend/my-models
+!backend/models/.gitkeep
+backend/static
+.env
+*.pyc

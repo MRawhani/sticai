@@ -7,6 +7,9 @@ from uuid import uuid4
 import os
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
+from dotenv import load_dotenv
+load_dotenv()
+huggingface_token = os.getenv("HUGGINGFACE_TOKEN")
 
 # Initialize FastAPI
 app = FastAPI()
@@ -52,7 +55,7 @@ def load_pipeline():
         # Check if the model exists locally
         if not os.path.exists(xl_local_model_path):
             print("Model not found locally. Downloading...")
-            login(token="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")
+            login(token=huggingface_token)
 
             pipe = StableDiffusionXLPipeline.from_pretrained(base_model_id,  torch_dtype=torch.float16, variant="fp16", use_safetensors=True)
             pipe.save_pretrained(xl_local_model_path)  # Save the model locally for future use
@@ -94,8 +97,8 @@ async def generate_image(prompt: str):
         pipe.scheduler = scheduler
 
         # Generate the image
-        image = pipe(prompt=prompt, num_inference_steps=100, guidance_scale=7.5, height=512, width=512).images[0]
-        refined_image = refiner_pipe(prompt=prompt, image=image, num_inference_steps=100,guidance_scale=7.5, height=512, width=512).images[0]
+        image = pipe(prompt=prompt, num_inference_steps=50, guidance_scale=7.5, height=512, width=512).images[0]
+        refined_image = refiner_pipe(prompt=prompt, image=image, num_inference_steps=50,guidance_scale=7.5, height=512, width=512).images[0]
         output_filename = f"{uuid4().hex}.png"  # Generate a unique filename
         output_path = os.path.join(static_dir, output_filename)
         refined_image.save(output_path)
